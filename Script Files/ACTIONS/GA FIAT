@@ -1,0 +1,215 @@
+'STATS GATHERING----------------------------------------------------------------------------------------------------
+name_of_script = "ACTIONS - GAFIAT.vbs"
+start_time = timer
+
+'LOADING FUNCTIONS LIBRARY FROM GITHUB REPOSITORY===========================================================================
+IF IsEmpty(FuncLib_URL) = TRUE THEN	'Shouldn't load FuncLib if it already loaded once
+	IF run_locally = FALSE or run_locally = "" THEN		'If the scripts are set to run locally, it skips this and uses an FSO below.
+		IF default_directory = "C:\DHS-MAXIS-Scripts\Script Files\" THEN			'If the default_directory is C:\DHS-MAXIS-Scripts\Script Files, you're probably a scriptwriter and should use the master branch.
+			FuncLib_URL = "https://raw.githubusercontent.com/MN-Script-Team/BZS-FuncLib/master/MASTER%20FUNCTIONS%20LIBRARY.vbs"
+		ELSEIF beta_agency = "" or beta_agency = True then							'If you're a beta agency, you should probably use the beta branch.
+			FuncLib_URL = "https://raw.githubusercontent.com/MN-Script-Team/BZS-FuncLib/BETA/MASTER%20FUNCTIONS%20LIBRARY.vbs"
+		Else																		'Everyone else should use the release branch.
+			FuncLib_URL = "https://raw.githubusercontent.com/MN-Script-Team/BZS-FuncLib/RELEASE/MASTER%20FUNCTIONS%20LIBRARY.vbs"
+		End if
+		SET req = CreateObject("Msxml2.XMLHttp.6.0")				'Creates an object to get a FuncLib_URL
+		req.open "GET", FuncLib_URL, FALSE							'Attempts to open the FuncLib_URL
+		req.send													'Sends request
+		IF req.Status = 200 THEN									'200 means great success
+			Set fso = CreateObject("Scripting.FileSystemObject")	'Creates an FSO
+			Execute req.responseText								'Executes the script code
+		ELSE														'Error message, tells user to try to reach github.com, otherwise instructs to contact Veronica with details (and stops script).
+			MsgBox 	"Something has gone wrong. The code stored on GitHub was not able to be reached." & vbCr &_ 
+					vbCr & _
+					"Before contacting Veronica Cary, please check to make sure you can load the main page at www.GitHub.com." & vbCr &_
+					vbCr & _
+					"If you can reach GitHub.com, but this script still does not work, ask an alpha user to contact Veronica Cary and provide the following information:" & vbCr &_
+					vbTab & "- The name of the script you are running." & vbCr &_
+					vbTab & "- Whether or not the script is ""erroring out"" for any other users." & vbCr &_
+					vbTab & "- The name and email for an employee from your IT department," & vbCr & _
+					vbTab & vbTab & "responsible for network issues." & vbCr &_
+					vbTab & "- The URL indicated below (a screenshot should suffice)." & vbCr &_
+					vbCr & _
+					"Veronica will work with your IT department to try and solve this issue, if needed." & vbCr &_ 
+					vbCr &_
+					"URL: " & FuncLib_URL
+					script_end_procedure("Script ended due to error connecting to GitHub.")
+		END IF
+	ELSE
+		FuncLib_URL = "C:\BZS-FuncLib\MASTER FUNCTIONS LIBRARY.vbs"
+		Set run_another_script_fso = CreateObject("Scripting.FileSystemObject")
+		Set fso_command = run_another_script_fso.OpenTextFile(FuncLib_URL)
+		text_from_the_other_script = fso_command.ReadAll
+		fso_command.Close
+		Execute text_from_the_other_script
+	END IF
+END IF
+'END FUNCTIONS LIBRARY BLOCK================================================================================================
+
+
+Dim Unit_Info_Dialog
+Dim Self_Employment_Income_Dialog
+Dim Case_Number
+Dim Budget_Cycle
+Dim Unit_Type
+Dim Self_Employment_Check
+Dim Self_Employment_Income
+Dim ButtonPressed
+Dim Income_Jobs
+Dim Income_Unea
+Dim Asset_Acct
+Dim Asset_Cars
+Dim Asset_Othr
+Dim Asset_Secu
+Dim Asset_Total
+Dim Appl_Date
+
+
+'Dialog for GA Info
+BeginDialog Unit_Info_Dialog, 0, 0, 206, 160, "GA Fiat"
+  EditBox 100, 0, 80, 15, Case_Number
+  DropListBox 100, 20, 80, 15, "Select One"+chr(9)+"Prospective"+chr(9)+"Retrospective", Budget_Cycle
+  DropListBox 100, 35, 80, 15, "Select One"+chr(9)+"Single Adult & Emancipated "+chr(9)+"Single Adult  Lv W/ Parents"+chr(9)+"Minor Child Outside Home "+chr(9)+"Married Couple"+chr(9)+"Family State Food Program "+chr(9)+"FACI Personal Needs", Unit_Type
+  CheckBox 100, 55, 100, 15, "HH has Self-Employment", Self_Employment_Check
+  ButtonGroup ButtonPressed
+    OkButton 35, 135, 50, 15
+    CancelButton 100, 135, 50, 15
+  Text 5, 5, 70, 10, "Case Number"
+  Text 5, 20, 75, 10, "Budget Cycle"
+  Text 5, 40, 60, 10, "Unit Type"
+EndDialog
+
+'Dialog for SE Info
+BeginDialog Self_Employment_Dialog, 0, 0, 196, 60, "SE Income"
+  EditBox 125, 5, 65, 15, Self_Employment_Income
+  ButtonGroup ButtonPressed
+    OkButton 40, 40, 50, 15
+    CancelButton 105, 40, 50, 15
+  Text 5, 5, 115, 15, "What is the amount of countable Self-Employment?"
+EndDialog
+
+
+'Call Dialog for GA FIAT Info
+Do
+	Dialog Unit_Info_Dialog
+	If ButtonPressed = 0 Then stopscript
+	If IsNumeric (Case_Number) = False Then MsgBox "That's not a case number, genius."
+	If Unit_Type = "Select One" Then MsgBox "Select Unit Type"
+	If Budget_Cycle = "Select One" Then MsgBox "Select Budget Type"
+Loop until IsNumeric (Case_Number) = true	And Unit_Type <> "Select One" And Budget_Cycle <> "Select One"
+
+	If Self_Employment_Check = 1  Then Dialog Self_Employment_Dialog
+
+
+
+
+'Connect to BZ
+EMConnect ""
+EMFocus
+Call check_for_MAXIS(True)
+
+Call MAXIS_case_number_finder (Case_Number)
+
+
+'Populate Appl_Date
+Call navigate_to_MAXIS_screen ("STAT", "PROG")
+EMReadScreen Appl_Date, 8, 06, 033
+
+
+'Populate Jobs Income
+If Budget_Cycle = "Prospective" Then 
+	Call navigate_to_MAXIS_screen ("STAT", "JOBS")
+	EMReadScreen Income_Jobs, 8, 17, 067
+End If
+
+If Budget_Cycle = "Retrospective" Then 
+	Call navigate_to_MAXIS_screen ("STAT", "JOBS")
+	EMReadScreen Income_Jobs, 8, 17, 038
+End If
+
+
+
+'Populate Unea Income
+If Budget_Cycle = "Prospective" Then 
+	Call navigate_to_MAXIS_screen ("STAT", "UNEA")
+	EMReadScreen Income_Unea, 8, 18, 068
+End If
+
+If Budget_Cycle = "Retrospective" Then 
+	Call navigate_to_MAXIS_screen ("STAT", "UNEA")
+	EMReadScreen Income_Unea, 8, 18, 039
+End If
+
+
+'Populate Assets - Unfinished
+Call navigate_to_MAXIS_screen ("STAT", "ACCT")
+EMReadScreen Asset_Acct, 8, 10, 046
+If Asset_Acct = "______" Then Asset_Acct = 0
+Call navigate_to_MAXIS_screen ("STAT", "CARS")
+EMReadScreen Asset_Cars, 8, 09, 045
+If Asset_Cars = "________" Then Asset_Cars = 0
+Call navigate_to_MAXIS_screen ("STAT", "OTHR")
+EMReadScreen Asset_Othr, 10, 08, 040
+If Asset_Othr = "________" Then Asset_Othr = 0
+Call navigate_to_MAXIS_screen ("STAT", "SECU")
+EMReadScreen Asset_Secu, 8, 10, 052
+If Asset_Secu = "________" Then Asset_Secu = 0
+
+
+Asset_Total = CInt (Asset_Acct) + CInt (Asset_Othr) + CInt(Asset_Cars) + CInt (Asset_Secu)
+Back_To_Self
+
+'Begin FIAT
+EMWriteScreen "fiat", 16, 043
+Transmit
+
+'Select GA
+EMWriteScreen "10", 04,034
+EMWriteScreen "x", 12,022
+Transmit
+
+
+'Fill (GASP) Page
+EMWriteScreen Budget_Cycle,08,063
+If Unit_Type = "FACI Personal Needs" Then 
+	EMWriteScreen "5",18,077
+ElseIf Unit_Type = "Single Adult & Emancipated " Then
+	EMWriteScreen "1",18,052
+ElseIf Unit_Type = "Single Adult  Lv W/ Parents" Then
+	EMWriteScreen "2",18,052
+ElseIf Unit_Type = "Minor Child Outside Home " Then
+	EMWriteScreen "3",18,052
+ElseIf Unit_Type = "Married Couple" Then
+	EMWriteScreen "6",18,052
+ElseIf Unit_Type = "Family State Food Program " Then
+	EMWriteScreen "9",18,052
+End If
+
+EMWriteScreen "x", 19, 027
+EMWriteScreen "x", 19, 050
+
+Transmit
+Transmit
+
+'Fill (GAB1) page
+EMWriteScreen CInt(Income_Jobs),06,030
+EMWriteScreen CInt(Self_Employment_Income),07,030
+EMWriteScreen CInt(Income_Unea),08,072
+
+Transmit
+Transmit
+
+'Fill (GAB2) page
+EMWriteScreen CInt(Asset_Total),15,026
+
+Transmit
+Transmit
+
+MsgBox "Check for accuracy before approval"
+
+
+
+
+
+
+
